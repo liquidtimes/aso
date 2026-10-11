@@ -63,13 +63,15 @@ const collectors = {
       return i >= 0 ? i + 1 : null;
     }, 400);
   },
-  // Эта выдача открывается только с российских адресов: нужен прокси в секрете PROXY_URL (http://логин:пароль@адрес:порт)
+  // Эта выдача открывается только с российских адресов: нужен прокси в секрете PROXY_URL (http:// или socks5://логин:пароль@адрес:порт)
   async appgallery() {
     const proxyUrl = process.env.PROXY_URL;
     if (!proxyUrl) { console.log('appgallery: пропуск, PROXY_URL не задан'); return null; }
     const { chromium } = await import('playwright');
-    const u = new URL(proxyUrl);
-    const browser = await chromium.launch({ proxy: { server: `${u.protocol}//${u.host}`, username: decodeURIComponent(u.username), password: decodeURIComponent(u.password) } });
+    // Chromium не умеет socks5 с логином: поднимаем локальный прокси без пароля, который ходит через указанный
+    const { anonymizeProxy } = await import('proxy-chain');
+    const local = await anonymizeProxy(proxyUrl);
+    const browser = await chromium.launch({ proxy: { server: local } });
     const page = await (await browser.newContext({ locale: 'ru-RU' })).newPage();
     try {
       return await eachQuery('appgallery', async (q) => {
@@ -81,7 +83,7 @@ const collectors = {
         const i = names.findIndex((n) => n.includes(NAME));
         return i >= 0 && i < DEPTH ? i + 1 : null;
       }, 700);
-    } finally { await browser.close(); }
+    } finally { await browser.close(); (await import('proxy-chain')).closeAnonymizedProxy(local, true); }
   },
 };
 
