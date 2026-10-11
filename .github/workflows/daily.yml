@@ -1,0 +1,31 @@
+name: daily
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node src/collect.mjs
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          QUERIES_JSON: ${{ secrets.QUERIES_JSON }}
+          APP_NAME: ${{ secrets.APP_NAME }}
+          GP_ID: ${{ secrets.GP_ID }}
+          IOS_ID: ${{ secrets.IOS_ID }}
+          RS_ID: ${{ secrets.RS_ID }}
+      - name: save
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/positions.json
+          git diff --cached --quiet || (git commit -m "data $(TZ=Europe/Moscow date +%F)" && git pull --rebase && git push)
