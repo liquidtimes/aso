@@ -6,6 +6,7 @@
   "scripts": { "collect": "node src/collect.mjs" },
   "dependencies": {
     "google-play-scraper": "9.1.1",
-    "playwright": "1.49.1"
+    "playwright": "1.49.1",
+    "proxy-chain": "2.5.6"
   }
 }
