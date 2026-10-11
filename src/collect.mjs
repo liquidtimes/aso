@@ -13,7 +13,7 @@ if (!NAME || !GP_ID || !IOS_ID || !RS_ID) throw new Error('не заданы п�
 const DEPTH = 30;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
-const only = (process.argv[2] || '').split(',').filter(Boolean);
+const only = (process.argv[2] || process.env.ONLY || '').split(',').filter(Boolean);
 
 async function retry(fn, tries = 3) {
   let err;
@@ -79,7 +79,10 @@ const collectors = {
     try {
       return await eachQuery('appgallery', async (q) => {
         await page.goto('https://appgallery.huawei.com/search/' + encodeURIComponent(q), { waitUntil: 'domcontentloaded', timeout: 60000 });
-        await page.waitForFunction(() => document.body.innerText.includes('Результаты для'), null, { timeout: 25000 });
+        // у страницы строгая CSP: waitForFunction не работает, ждём обычным опросом
+        let ready = false;
+        for (let k = 0; k < 25 && !ready; k++) { ready = await page.evaluate(() => document.body.innerText.includes('Результаты для')); if (!ready) await sleep(1000); }
+        if (!ready) throw new Error('выдача не загрузилась');
         await page.waitForTimeout(1500);
         const text = await page.evaluate(() => document.body.innerText);
         const names = (text.split('Результаты для')[1] || '').split('\n').slice(1).join('\n').split('Установить').map((b) => b.trim().split('\n')[0]).filter(Boolean);
