@@ -27,7 +27,8 @@ async function eachQuery(name, fn, delay) {
   const out = {};
   let failed = 0;
   for (let n = 0; n < QUERIES.length; n++) {
-    try { out[n] = await retry(() => fn(QUERIES[n])); } catch (e) { failed++; }
+    try { out[n] = await retry(() => fn(QUERIES[n]), name === 'appgallery' ? 2 : 3); } catch (e) { failed++; if (failed === 1) console.log(name + ': первая ошибка: ' + e.message); }
+    if ((n + 1) % 20 === 0) console.log(`${name}: ${n + 1}/${QUERIES.length}, ошибок ${failed}`);
     await sleep(delay);
   }
   console.log(`${name}: ${Object.keys(out).length}/${QUERIES.length}, в топ-${DEPTH}: ${Object.values(out).filter((v) => v !== null).length}, ошибок ${failed}`);
@@ -37,8 +38,9 @@ async function eachQuery(name, fn, delay) {
 const collectors = {
   async gplay() {
     const gplay = (await import('google-play-scraper')).default;
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
     return eachQuery('gplay', async (q) => {
-      const r = await gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2 });
+      const r = await withTimeout(gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2 }), 30000);
       // у «фирменной» карточки в выдаче нет appId, ищем её по названию
       const i = r.findIndex((a) => a.appId === GP_ID || (!a.appId && (a.title || '').includes(NAME)));
       return i >= 0 && i < DEPTH ? i + 1 : null;
@@ -46,7 +48,7 @@ const collectors = {
   },
   async appstore() {
     return eachQuery('appstore', async (q) => {
-      const r = await fetch(`https://itunes.apple.com/ru/search?term=${encodeURIComponent(q)}&entity=software&limit=${DEPTH}&country=ru&lang=ru_ru`);
+      const r = await fetch(`https://itunes.apple.com/ru/search?term=${encodeURIComponent(q)}&entity=software&limit=${DEPTH}&country=ru&lang=ru_ru`, { signal: AbortSignal.timeout(20000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       const i = j.results.findIndex((a) => a.trackId === IOS_ID);
@@ -55,7 +57,7 @@ const collectors = {
   },
   async rustore() {
     return eachQuery('rustore', async (q) => {
-      const r = await fetch(`https://backapi.rustore.ru/applicationData/apps?query=${encodeURIComponent(q)}&pageSize=${DEPTH}&pageNumber=0`, { headers: { Accept: 'application/json' } });
+      const r = await fetch(`https://backapi.rustore.ru/applicationData/apps?query=${encodeURIComponent(q)}&pageSize=${DEPTH}&pageNumber=0`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       if (j.code !== 'OK' || !j.body) throw new Error('bad payload');
@@ -95,6 +97,7 @@ for (const name of Object.keys(collectors)) {
     if (!res) continue;
     db.stores[name] ||= {};
     db.stores[name][date] = { ...(db.stores[name][date] || {}), ...res };
+    writeFileSync(DATA, JSON.stringify(db));
   } catch (e) { console.log(name + ': сбой магазина целиком: ' + e.message); }
 }
 db.updated = new Date().toISOString();
