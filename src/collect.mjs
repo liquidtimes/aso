@@ -25,9 +25,10 @@ async function retry(fn, tries = 3) {
 
 async function eachQuery(name, fn, delay) {
   const out = {};
-  let failed = 0;
+  let failed = 0, streak = 0;
   for (let n = 0; n < QUERIES.length; n++) {
-    try { out[n] = await retry(() => fn(QUERIES[n]), name === 'appgallery' ? 2 : 3); } catch (e) { failed++; if (failed === 1) console.log(name + ': первая ошибка: ' + e.message); }
+    try { out[n] = await retry(() => fn(QUERIES[n]), 2); streak = 0; } catch (e) { failed++; streak++; if (failed === 1) console.log(name + ': первая ошибка: ' + e.message); }
+    if (streak >= 6) { console.log(name + ': 6 ошибок подряд, магазин пропущен (источник недоступен)'); break; }
     if ((n + 1) % 20 === 0) console.log(`${name}: ${n + 1}/${QUERIES.length}, ошибок ${failed}`);
     await sleep(delay);
   }
@@ -40,7 +41,7 @@ const collectors = {
     const gplay = (await import('google-play-scraper')).default;
     const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
     return eachQuery('gplay', async (q) => {
-      const r = await withTimeout(gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2 }), 30000);
+      const r = await withTimeout(gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2 }), 20000);
       // у «фирменной» карточки в выдаче нет appId, ищем её по названию
       const i = r.findIndex((a) => a.appId === GP_ID || (!a.appId && (a.title || '').includes(NAME)));
       return i >= 0 && i < DEPTH ? i + 1 : null;
