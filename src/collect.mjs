@@ -107,3 +107,4 @@ for (const name of Object.keys(collectors)) {
 db.updated = new Date().toISOString();
 writeFileSync(DATA, JSON.stringify(db));
 console.log('готово', date);
+process.exit(0);
