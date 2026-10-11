@@ -2,7 +2,12 @@ name: daily
 on:
   schedule:
     - cron: '0 5 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'магазины через запятую (пусто = все)'
+        required: false
+        default: ''
 permissions:
   contents: write
 jobs:
@@ -17,6 +22,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node src/collect.mjs
         env:
+          ONLY: ${{ inputs.only }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
           QUERIES_JSON: ${{ secrets.QUERIES_JSON }}
           APP_NAME: ${{ secrets.APP_NAME }}
