@@ -39,9 +39,18 @@ async function eachQuery(name, fn, delay) {
 const collectors = {
   async gplay() {
     const gplay = (await import('google-play-scraper')).default;
+    // Google Play режет запросы с адресов GitHub: идём через российский прокси, если он задан
+    let local = null, requestOptions;
+    if (process.env.PROXY_URL) {
+      const { anonymizeProxy } = await import('proxy-chain');
+      const { HttpsProxyAgent } = await import('https-proxy-agent');
+      local = await anonymizeProxy(process.env.PROXY_URL);
+      requestOptions = { agent: { https: new HttpsProxyAgent(local) } };
+      console.log('gplay: через прокси');
+    }
     const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
     return eachQuery('gplay', async (q) => {
-      const r = await withTimeout(gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2 }), 20000);
+      const r = await withTimeout(gplay.search({ term: q, lang: 'ru', country: 'ru', num: DEPTH, throttle: 2, requestOptions }), 20000);
       // у «фирменной» карточки в выдаче нет appId, ищем её по названию
       const i = r.findIndex((a) => a.appId === GP_ID || (!a.appId && (a.title || '').includes(NAME)));
       return i >= 0 && i < DEPTH ? i + 1 : null;
