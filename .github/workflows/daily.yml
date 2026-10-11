@@ -24,6 +24,7 @@ jobs:
           IOS_ID: ${{ secrets.IOS_ID }}
           RS_ID: ${{ secrets.RS_ID }}
       - name: save
+        if: always()
         run: |
           git config user.name "bot"
           git config user.email "bot@users.noreply.github.com"
