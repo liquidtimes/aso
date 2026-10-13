@@ -107,6 +107,8 @@ const collectors = {
         const text = await page.evaluate(() => document.body.innerText);
         const names = (text.split('Результаты для')[1] || '').split('\n').slice(1).join('\n').split('Установить').map((b) => b.trim().split('\n')[0]).filter(Boolean);
         const i = names.findIndex((n) => n.includes(NAME));
+        // у выдачи AppGallery есть только названия: по ним же считаем место среди конкурентов
+        rec('appgallery', n, names.slice(0, DEPTH).map((t) => ({ id: 'ag:' + t, name: t, us: t.includes(NAME) })));
         return i >= 0 && i < DEPTH ? i + 1 : null;
       }, 700);
     } finally { await browser.close(); (await import('proxy-chain')).closeAnonymizedProxy(local, true); }
@@ -158,6 +160,8 @@ function marketOf(store) {
 const db = existsSync(DATA) ? JSON.parse(readFileSync(DATA, 'utf8')) : { stores: {} };
 for (const name of Object.keys(collectors)) {
   if (only.length && !only.includes(name)) continue;
+  // расписание запускает сбор несколько раз в сутки (GitHub иногда пропускает запуски): магазин, уже собранный сегодня, пропускаем
+  if (!only.length && Object.keys((db.stores[name] || {})[date] || {}).length >= QUERIES.length * 0.9) { console.log(name + ': сегодня уже собрано'); continue; }
   try {
     const res = await collectors[name]();
     if (!res) continue;
