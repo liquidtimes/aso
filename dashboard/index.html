@@ -535,41 +535,6 @@
     return added;
   }
   mergeRemote(REMOTE);
-  /* Подключаем актуальные замеры из публичного репозитория. */
-  (async function loadLatest() {
-    try {
-      const stamp = Date.now();
-      const responses = await Promise.all([
-        fetch('./data/queries.json?v=' + stamp, { cache: 'no-store' }),
-        fetch('./data/positions.json?v=' + stamp, { cache: 'no-store' })
-      ]);
-      if (!responses.every(r => r.ok)) throw new Error('Не удалось получить свежие данные');
-      const queries = await responses[0].json();
-      const source = await responses[1].json();
-      const normalized = { updated: source.updated, stores: {} };
-      Object.entries(source.stores || {}).forEach(([store, days]) => {
-        normalized.stores[store] = {};
-        Object.entries(days || {}).forEach(([date, values]) => {
-          const indexed = {};
-          queries.forEach((q, i) => {
-            if (Object.prototype.hasOwnProperty.call(values, q)) indexed[i] = values[q];
-          });
-          normalized.stores[store][date] = indexed;
-        });
-      });
-      if (mergeRemote(normalized)) {
-        const n = el('srcnote');
-        if (n && source.updated) {
-          const d = new Date(source.updated);
-          n.textContent = 'Последний сбор данных: ' + d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' (МСК).';
-        }
-        renderAll();
-        renderVis();
-      }
-    } catch (e) {
-      console.warn('Не удалось обновить данные ASO:', e);
-    }
-  })();
   let CUR = DATA;
 
   const WD = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
@@ -1032,4 +997,158 @@
   function applyRange() {
     el('dpLabel').textContent = yy(state.from) + ' – ' + yy(state.to);
     renderAll();
-    renderVis();
+    renderVis();    renderMarketChart();
+  }
+
+  function monthHtml(first, showPrev, showNext) {
+    const y = first.getFullYear(), m = first.getMonth();
+    const lead = (first.getDay() + 6) % 7;
+    const len = new Date(y, m + 1, 0).getDate();
+    const a = pick ? pick : state.from, b = pick ? pick : state.to;
+    let cells = WDS.map((w) => '<div class="cal-wd">' + w + '</div>').join('');
+    for (let i = 0; i < lead; i++) cells += '<div></div>';
+    for (let d = 1; d <= len; d++) {
+      const iso = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      const cls = 'cal-d' + (iso === a || iso === b ? ' edge' : iso > a && iso < b ? ' inr' : '');
+      cells += '<button type="button" class="' + cls + '" data-iso="' + iso + '"' + (iso > TODAY ? ' disabled' : '') + '>' + d + '</button>';
+    }
+    return '<div class="cal-m"><div class="cal-head">' +
+      '<button type="button" class="cal-nav' + (showPrev ? '' : ' ph') + '" data-nav="-1" aria-label="Предыдущий месяц">‹</button>' +
+      '<span class="cal-title">' + MONTHS[m] + ' ' + y + '</span>' +
+      '<button type="button" class="cal-nav' + (showNext ? '' : ' ph') + '" data-nav="1" aria-label="Следующий месяц"' + (new Date(y, m + 1, 1) > parse(TODAY) ? ' disabled' : '') + '>›</button>' +
+      '</div><div class="cal-grid">' + cells + '</div></div>';
+  }
+
+  function renderPop() {
+    const n2 = phone() ? 1 : 2;
+    let html = '<div class="cal-months">';
+    for (let k = n2 - 1; k >= 0; k--) {
+      const first = new Date(view.getFullYear(), view.getMonth() - k, 1);
+      html += monthHtml(first, k === n2 - 1, k === 0);
+    }
+    html += '</div><div class="cal-pre">' + PRESETS.map((p) => {
+      const on = !pick && state.to === TODAY && state.from === addDays(TODAY, -(p.days - 1));
+      return '<button type="button" data-p="' + p.days + '" aria-pressed="' + on + '">' + p.name + '</button>';
+    }).join('') + '</div>';
+    el('dpop').innerHTML = html;
+  }
+
+  function openPop() {
+    pick = null;
+    const to = parse(state.to);
+    view = new Date(to.getFullYear(), to.getMonth(), 1);
+    renderPop();
+    el('dpop').hidden = false;
+    el('dpBtn').setAttribute('aria-expanded', 'true');
+  }
+  function closePop() {
+    pick = null;
+    el('dpop').hidden = true;
+    el('dpBtn').setAttribute('aria-expanded', 'false');
+  }
+  el('dpBtn').addEventListener('click', () => { if (el('dpop').hidden) openPop(); else closePop(); });
+  el('dpop').addEventListener('click', (e) => {
+    const nav = e.target.closest('[data-nav]');
+    if (nav) { view = new Date(view.getFullYear(), view.getMonth() + Number(nav.dataset.nav), 1); renderPop(); return; }
+    const pre = e.target.closest('[data-p]');
+    if (pre) { setPreset(Number(pre.dataset.p)); closePop(); applyRange(); return; }
+    const day = e.target.closest('[data-iso]');
+    if (!day) return;
+    if (!pick) { pick = day.dataset.iso; renderPop(); return; }
+    const a = pick, b = day.dataset.iso;
+    state.from = a < b ? a : b;
+    state.to = a < b ? b : a;
+    closePop();
+    applyRange();
+  });
+  document.addEventListener('click', (e) => { if (!el('dpop').hidden && !el('dp').contains(e.target)) closePop(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el('dpop').hidden) { closePop(); el('dpBtn').focus(); } });
+  el('dpLabel').textContent = yy(state.from) + ' – ' + yy(state.to);
+
+  const setHelp = (open) => { el('visPop').hidden = !open; el('visHelp').setAttribute('aria-expanded', String(open)); };
+  el('visHelp').addEventListener('click', () => setHelp(el('visPop').hidden));
+  document.addEventListener('click', (e) => { if (!el('visPop').hidden && !el('visPop').contains(e.target) && !el('visHelp').contains(e.target)) setHelp(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el('visPop').hidden) { setHelp(false); el('visHelp').focus(); } });
+  window.addEventListener('resize', () => { renderVis(); renderMarketChart(); });
+  el('country').innerHTML = REGIONS.map((c) => '<option value="' + c.code + '"' + (c.off ? ' disabled' : '') + '>' + esc(c.name) + (c.off ? ' (скоро)' : '') + '</option>').join('');
+  setStore(state.store);
+
+  /* Свежие замеры: ежедневная задача кладёт их в базу страницы (remote/positions), здесь дописываем новые даты */
+  (async () => {
+    try {
+      const db = await claude.use('db');
+      if (!db) return;
+      const snap = await db.collection('remote').doc('positions').get();
+      const R = snap && snap.exists ? snap.data() : null;
+      if (!R) return;
+      const atEnd = state.sel >= CUR.dates.length - 1;
+      if (mergeRemote(R)) {
+        const st = STORES.find((x) => x.id === state.store);
+        if (st && st.data && atEnd) state.sel = st.data.dates.length - 1;
+        const oldToday = TODAY;
+        TODAY = calcToday();
+        if (state.to === oldToday && TODAY !== oldToday) {
+          const span = Math.round((parse(oldToday) - parse(state.from)) / 864e5);
+          state.to = TODAY; state.from = addDays(TODAY, -span);
+        }
+        setStore(state.store);
+        el('dpLabel').textContent = yy(state.from) + ' – ' + yy(state.to);
+      }
+      const n = document.getElementById('srcnote');
+      if (n && R.updated) n.textContent = 'Последний сбор данных: ' + new Date(R.updated).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' (МСК).';
+    } catch (e) { /* остаются данные, вшитые в страницу */ }
+  })();
+
+  /* Добавление и удаление запросов: только для тех, у кого есть доступ к db */
+  (async () => {
+    let db = null;
+    try { db = await claude.use('db'); } catch (e) { db = null; }
+    if (!db) return;
+    const col = db.collection('keywords');
+    const say = (t) => { el('kwMsg').textContent = t || ''; };
+    const fail = (e) => say(e && e.code === 'not_granted' ? 'Нет прав на изменение списка.' : 'Не удалось сохранить, попробуйте ещё раз.');
+    el('kwbar').hidden = false;
+    col.onSnapshot((snap) => {
+      EDITS = {};
+      snap.docs.forEach((d) => { const v = d.data(); if (v && v.q) EDITS[d.id] = v; });
+      refreshStore();
+    }, () => {});
+    el('kwAdd').addEventListener('click', () => {
+      el('kwForm').hidden = !el('kwForm').hidden;
+      if (!el('kwForm').hidden) el('kwQ').focus();
+      say('');
+    });
+    el('kwEdit').addEventListener('click', () => {
+      state.edit = !state.edit;
+      el('kwEdit').setAttribute('aria-pressed', String(state.edit));
+      el('kwEdit').textContent = state.edit ? 'Готово' : 'Изменить';
+      el('tbl').classList.toggle('editing', state.edit);
+      renderAll();
+    });
+    el('kwForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = norm(el('kwQ').value);
+      if (!q) return;
+      const fv = parseInt(el('kwF').value.replace(/\s/g, ''), 10);
+      if (CUR.rows.some((x) => norm(x.q) === q)) { say('Такой запрос уже есть в списке.'); return; }
+      const id = kid(q), cur = EDITS[id];
+      try {
+        if (cur && cur.op === 'remove') await col.doc(id).delete();
+        else await col.doc(id).set(Object.assign({ q: q, op: 'add', ts: Date.now() }, isFinite(fv) ? { f: fv } : {}));
+        el('kwQ').value = ''; el('kwF').value = ''; say('');
+      } catch (err) { fail(err); }
+    });
+    el('body').addEventListener('click', async (e) => {
+      const b = e.target.closest('.rm');
+      if (!b) return;
+      const q = b.dataset.q, id = kid(q), cur = EDITS[id];
+      try {
+        if (cur && cur.op === 'add') await col.doc(id).delete();
+        else await col.doc(id).set({ q: q, op: 'remove', ts: Date.now() });
+        say('');
+      } catch (err) { fail(err); }
+    });
+  })();
+  </script>
+
+</body></html>
