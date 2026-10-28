@@ -1,0 +1,13 @@
+{
+  "name": "hv-aso-public-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Daily ASO position collection for the public dashboard",
+  "scripts": {
+    "collect": "node src/collect.mjs"
+  },
+  "dependencies": {
+    "google-play-scraper": "9.1.1",
+    "playwright": "1.49.1"
+  }
+}
