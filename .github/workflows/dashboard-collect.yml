@@ -1,0 +1,33 @@
+name: ASO dashboard - daily collection
+on:
+  schedule:
+    - cron: '0 5 * * *' # 08:00 Moscow
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package.json
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm install --no-audit --no-fund
+      - name: Install browser
+        run: npx --prefix dashboard playwright install --with-deps chromium
+      - name: Collect positions
+        run: node dashboard/src/collect.mjs
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+      - name: Save data
+        run: |
+          git config user.name "aso-dashboard-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add dashboard/data/positions.json
+          git diff --cached --quiet || (git commit -m "ASO positions for $(TZ=Europe/Moscow date +%F)" && git pull --rebase && git push)
