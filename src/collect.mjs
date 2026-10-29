@@ -17,6 +17,7 @@ const DEPTH = 30;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
 const only = (process.argv[2] || process.env.ONLY || '').split(',').filter(Boolean);
+process.on('unhandledRejection', (e) => console.log('unhandledRejection: ' + (e && e.message)));
 
 async function retry(fn, tries = 3) {
   let err;
@@ -160,6 +161,7 @@ function marketOf(store) {
 const db = existsSync(DATA) ? JSON.parse(readFileSync(DATA, 'utf8')) : { stores: {} };
 for (const name of Object.keys(collectors)) {
   if (only.length && !only.includes(name)) continue;
+  if (name === 'gplay' && !only.includes('gplay')) { console.log('gplay: на GitHub не собираем (Google Play режет адреса GitHub), его снимает отдельная ежедневная задача'); continue; }
   // расписание запускает сбор несколько раз в сутки (GitHub иногда пропускает запуски): магазин, уже собранный сегодня, пропускаем
   if (!only.length && Object.keys((db.stores[name] || {})[date] || {}).length >= QUERIES.length * 0.9) { console.log(name + ': сегодня уже собрано'); continue; }
   try {
