@@ -155,7 +155,7 @@ function marketOf(store) {
   const topn = rank.slice(0, 5).map(([k, v]) => ({ name: nm(k), v: round(v), us: k === 'US' }));
   const ours = V.US || 0;
   if (pos > 5) topn.push({ name: nm('US'), v: round(ours), us: true, rank: pos });
-  return { rank: pos || null, total: rank.filter(([, v]) => v > 0).length, v: round(ours), top: topn, queries: used };
+  return { rank: pos || null, total: rank.filter(([, v]) => v > 0).length, v: round(ours), top: topn, queries: used, comp: rank.filter(([k]) => k !== 'US').map(([, v]) => Math.round(v * 100) / 100) };
 }
 
 const db = existsSync(DATA) ? JSON.parse(readFileSync(DATA, 'utf8')) : { stores: {} };
