@@ -13,7 +13,7 @@ const FF = join(here, '..', 'config', 'freq.json');
 const FREQ = existsSync(FF) ? JSON.parse(readFileSync(FF, 'utf8')) : [];
 const NAME = process.env.APP_NAME, GP_ID = process.env.GP_ID, IOS_ID = Number(process.env.IOS_ID), RS_ID = process.env.RS_ID;
 if (!NAME || !GP_ID || !IOS_ID || !RS_ID) throw new Error('не заданы переменные APP_NAME, GP_ID, IOS_ID, RS_ID');
-const DEPTH = 30;
+const DEPTH = 50;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
 const only = (process.argv[2] || process.env.ONLY || '').split(',').filter(Boolean);
